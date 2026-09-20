@@ -20,7 +20,6 @@ server (Sept 2026).
 |---|---|---|
 | decode (non-thinking) | **52 tok/s** | 26 tok/s |
 | decode (thinking) | **37 tok/s** | 16 tok/s |
-| layers on GPU | **66/66** | partial (CPU spill) |
 
 > **What about IPEX-LLM?** Intel's IPEX-LLM project (the old "Ollama portable zip")
 > is **archived** (Jan 2026) and flagged with known security issues. This image
