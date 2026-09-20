@@ -1,0 +1,32 @@
+services:
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OLLAMA_VERSION: ${OLLAMA_VERSION:-0.34.2}
+    image: ollama-sycl:local
+    container_name: ollama-sycl
+    restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri
+    ipc: host
+    volumes:
+      - ${MODELS_DIR:-./models}:/root/.ollama
+      - sycl-cache:/root/.cache
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - no_proxy=localhost,127.0.0.1
+      - NO_PROXY=localhost,127.0.0.1
+      - ONEAPI_DEVICE_SELECTOR=${ONEAPI_DEVICE_SELECTOR:-level_zero:0}
+      - ZES_ENABLE_SYSMAN=1
+      - SYCL_CACHE_PERSISTENT=0
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-4096}
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+      - OLLAMA_MAX_LOADED_MODELS=0
+      - OLLAMA_ORIGINS=${OLLAMA_ORIGINS:-*}
+
+volumes:
+  sycl-cache: {}

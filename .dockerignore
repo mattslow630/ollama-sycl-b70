@@ -1,0 +1,5 @@
+models/
+build*.log
+*.log
+.git
+.env

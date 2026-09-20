@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  Unraid template for ollama-sycl (Ollama + Intel Arc SYCL/oneAPI backend).
+  Build the image first: clone this repo to /mnt/user/appdata/ollama-sycl-b70
+  and run ./scripts/build.sh there. The template then points at the local image.
+  NOTE: this template expects image ollama-sycl:local already present.
+-->
+<Container version="2">
+  <Name>ollama-sycl</Name>
+  <Repository>ollama-sycl:local</Repository>
+  <Registry>local</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/mattslow630/ollama-sycl-b70</Support>
+  <Project>https://ollama.com/</Project>
+  <Overview>Ollama with an Intel Arc SYCL/oneAPI backend (built from Ollama source). 2x faster than stock Vulkan on Battlemage. Build the image first: git clone https://github.com/mattslow630/ollama-sycl-b70 /mnt/user/appdata/ollama-sycl-b70 &amp;&amp; cd /mnt/user/appdata/ollama-sycl-b70 &amp;&amp; ./scripts/build.sh</Overview>
+  <Category>AI: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:11434]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/ollama/ollama/main/docs/ollama.png</Icon>
+  <ExtraParams>--device=/dev/dri --ipc=host</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Config Name="Model Storage" Target="/root/.ollama" Default="/mnt/user/appdata/ollama-sycl/models" Mode="rw" Description="Host path for models (4-20 GB each)" Type="Path" Display="always" Required="true">/mnt/user/appdata/ollama-sycl/models</Config>
+  <Config Name="SYCL Cache" Target="/root/.cache" Default="/mnt/user/appdata/ollama-sycl/sycl-cache" Mode="rw" Description="Persistent JIT cache - makes model loads fast after first run" Type="Path" Display="always" Required="false">/mnt/user/appdata/ollama-sycl/sycl-cache</Config>
+  <Config Name="Ollama API Port" Target="11434" Default="11434" Mode="tcp" Description="API port" Type="Port" Display="always" Required="true">11434</Config>
+  <Config Name="ONEAPI_DEVICE_SELECTOR" Target="ONEAPI_DEVICE_SELECTOR" Default="level_zero:0" Mode="" Description="Pin the Arc dGPU; try level_zero:1 if the iGPU is index 0" Type="Variable" Display="always" Required="false">level_zero:0</Config>
+  <Config Name="ZES_ENABLE_SYSMAN" Target="ZES_ENABLE_SYSMAN" Default="1" Mode="" Description="VRAM accounting - keep 1" Type="Variable" Display="hide" Required="false">1</Config>
+  <Config Name="SYCL_CACHE_PERSISTENT" Target="SYCL_CACHE_PERSISTENT" Default="0" Mode="" Description="MUST be 0 on Battlemage (segfault otherwise)" Type="Variable" Display="hide" Required="false">0</Config>
+  <Config Name="OLLAMA_KEEP_ALIVE" Target="OLLAMA_KEEP_ALIVE" Default="10m" Mode="" Description="Unload models after this idle time (-1 = never)" Type="Variable" Display="always" Required="false">10m</Config>
+  <Config Name="OLLAMA_CONTEXT_LENGTH" Target="OLLAMA_CONTEXT_LENGTH" Default="4096" Mode="" Description="Context window in tokens (more = more VRAM)" Type="Variable" Display="always" Required="false">4096</Config>
+  <Config Name="OLLAMA_ORIGINS" Target="OLLAMA_ORIGINS" Default="*" Mode="" Description="CORS origins for web UIs" Type="Variable" Display="hide" Required="false">*</Config>
+</Container>
