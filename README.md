@@ -18,7 +18,7 @@ server (Sept 2026).
 
 > **Why not stock Ollama + Vulkan?**
 > Measured on the same B70, same qwen3.8:27b model:
-
+>
 | | SYCL (this image) | Stock Ollama + Vulkan |
 |---|---|---|
 | decode (non-thinking) | **52 tok/s** | 26 tok/s |
@@ -29,6 +29,44 @@ server (Sept 2026).
 > does not use it — the SYCL backend is compiled from Ollama's own source tree
 > against Ollama's pinned llama.cpp, so it tracks whatever Ollama version you
 > pin.
+
+## XMX flash attention (Sept 2026 update)
+
+The B70's 256 XMX matrix engines can run the attention calculation via Intel's
+oneDNN SDPA path instead of generic SYCL kernels — a **3.4x prefill win** for
+Qwen3-class dense models, at a ~30% decode cost on 27B Q4.
+
+Two knobs, set together:
+
+- `GGML_SYCL_DNN=ON` at **build time** (this repo's Dockerfile already enables
+  it — oneDNN ships with the oneAPI base image, no extra step)
+- `GGML_SYCL_FA_ONEDNN=1` at **runtime** (env var) to select the XMX path
+
+**Measured A/B on this stack (Ollama 0.34.2 + SYCL, Qwen3.8-27B Q4_K_XL smtek,
+q8_0 KV, FA on, 122880 ctx):**
+
+| Metric | Without XMX FA | With `GGML_SYCL_FA_ONEDNN=1` | Delta |
+|---|---|---|---|
+| Prefill (11k-token prompt) | ~205 tok/s | **~698 tok/s** | **+240%** |
+| Decode (300 tok, same script) | ~41 tok/s | ~28 tok/s | **-32%** |
+
+**Rule of thumb:** enable for agentic / document-pipeline workloads (RAG,
+summarization, long-context extraction — prefill dominates); disable for
+interaactive chat at short contexts (decode dominates). Toggle is one env var
+plus a container recreate, no image rebuild needed.
+
+**Notes & caveats:**
+- XMX FA only fires when flash attention is ON (`OLLAMA_FLASH_ATTENTION=true`)
+  and works with quantized KV — quantized K/V goes through a dequant->f16
+  step inside the kernel, so q8_0 KV stays cheap on VRAM.
+- The GEMM path (matmul for the model's weights) does **not** use XMX in this
+  llama.cpp yet — the decode slowdown above is the cost of that TODO.
+- `llama.cpp` upstream merged the quantized-KV oneDNN SDPA path in
+  [PR #25874](https://github.com/ggml-org/llama.cpp/pull/25874)
+  (2026-08-04) and the original XMX SDPA in
+  [PR #25222](https://github.com/ggml-org/llama.cpp/pull/25222).
+- Decode throughput is also influenced by `--ipc=host` (see below) — verify
+  that first if numbers look low.
 
 ## Requirements
 
@@ -61,6 +99,7 @@ docker run -d --name ollama --restart unless-stopped \
   -e OLLAMA_KEEP_ALIVE=10m \
   -e OLLAMA_KV_CACHE_TYPE=q8_0 \
   -e OLLAMA_FLASH_ATTENTION=true \
+  -e GGML_SYCL_FA_ONEDNN=1 \
   -p 11434:11434 \
   -v $(pwd)/models:/root/.ollama \
   ollama-sycl:local
@@ -138,6 +177,7 @@ docker build -f Dockerfile.offline -t ollama-sycl:local .
 | `OLLAMA_ORIGINS` | `*` | CORS for web UIs (Open WebUI, etc.) |
 | `OLLAMA_NUM_CTX` | `4096` | Bigger context = more VRAM |
 | `OLLAMA_MAX_LOADED_MODELS` | `0` | Leave 0 for full dynamic load/unload |
+| `GGML_SYCL_FA_ONEDNN` | `0` | Set `1` to route FA through oneDNN/XMX. **Requires the image to be built with `GGML_SYCL_DNN=ON`** (this repo's default). See XMX section above. |
 
 ## Recommended models & measured performance (Intel Arc Pro B70, 32 GB)
 
@@ -173,19 +213,23 @@ OLLAMA_FLASH_ATTENTION=true
 | `qwen3.8:27b-80k` | 16.8 GB (Q4) | 80k | 2.7 GB | **~41 tok/s** | Workhorse. 66/66 layers GPU, ~30.5 GiB total loaded |
 | `qwen3.8-27b-q5-64k` | 20.2 GB (Q5_K_XL) | 64k | ~2.2 GB | ~31 tok/s | Quality + long ctx |
 | `qwen3.8-27b-q6-48k` | 22.0 GB (Q6_K) | 48k | ~1.7 GB | ~31 tok/s | Max weight fidelity |
+| `smtek/Qwen3.8-27B:Q4_K_XL` | 18.0 GB (Q4_K_XL) | 122k | 4.1 GB | **~28 tok/s** with XMX FA on | Long-context king; 66/66 layers GPU |
 
 VRAM math (B70 = 31.9 GiB visible): `weights + KV + ~2 GB SYCL/runtime buffers`.
 Q4@80k lands at ~30.5 GiB total — tight but clean, 66/66 layers, zero CPU
 spill. Q6@48k leaves ~8 GB free. Past 96k ctx the Q4 KV overflows (measured
-cliffs: 96k = 22 tok/s with 768 MB spill, 128k = 12 tok/s with 3 GB on CPU).
+cliffs: 96k = 22 tok/s with 768 MB spill, 128k = 12 tok/s with 3 GB on CPU)
+**unless** you keep q8_0 KV — at 122880 ctx with the smtek Q4_K_XL tag the
+4.1 GB q8_0 cache still fits on LMem together with the 18 GB weights.
 
 ### Performance expectations
 
-- **Decode:** 30-45 tok/s for 27B dense with MTP. MTP draft acceptance is
-  content-dependent (~45-93%); a "fast day" hits ~56 tok/s on Q4, typical
-  agent traffic lands ~37-42. Don't chase the high number — it's not a config
-  you can set.
-- **Prefill:** ~150-220 tok/s at short prompts via the API path.
+- **Decode:** 30-45 tok/s for 27B dense with MTP (XMX FA off), 24-30 with XMX FA on.
+  MTP draft acceptance is content-dependent (~45-93%); a "fast day" hits ~56
+  tok/s on Q4, typical agent traffic lands 28-42 depending on the FA flag.
+  Don't chase the high number — it's not a config you can set.
+- **Prefill:** 150-220 tok/s at short prompts via the API path (XMX off);
+  ~700 tok/s at 11k tokens with `GGML_SYCL_FA_ONEDNN=1`.
 - **Small models (context):** 8-14B class runs ~2x faster (e.g. 48+ tok/s
   on 14B) — good for fast auxiliary tasks sharing the card.
 - **First response after idle:** expect ~20-30 s cold load (VRAM read + SYCL
@@ -238,6 +282,9 @@ docker run ... --device /dev/dri ... \
   namespace; the default 64 MB `/dev/shm` caps you ~10-15% below real speed.
   Verify:
   `docker inspect ollama --format '{{.HostConfig.IpcMode}}'` → must be `host`.
+- **Decode ~30% slower after enabling `GGML_SYCL_FA_ONEDNN=1`** — expected, the
+  XMX FA kernel trades decode rate for the 3.4x prefill gain. If your workload
+  is chat-heavy, drop the flag and recreate.
 - **`quantized V cache requires flash_attn to be enabled`** — you set
   `OLLAMA_KV_CACHE_TYPE` without `OLLAMA_FLASH_ATTENTION=true`. Set both, or
   drop the KV quant.
