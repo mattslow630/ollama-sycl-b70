@@ -41,7 +41,7 @@ server (Sept 2026).
 ## Quick start
 
 ```bash
-git clone https://github.com/<you>/ollama-sycl-b70
+git clone https://github.com/mattslow630/ollama-sycl-b70
 cd ollama-sycl-b70
 ./scripts/build.sh
 ```
@@ -86,8 +86,9 @@ docker exec -it ollama ollama run qwen3:8b "Hello!" --verbose
 ### Unraid
 
 Option A — `docker-compose.yml` from this repo (Unraid 7 supports compose):
-copy the folder to `/mnt/user/appdata/ollama-sycl-b70`, set `models_dir` in
-`.env`, then `docker compose up -d`.
+copy the folder to `/mnt/user/appdata/ollama-sycl-b70`, then
+`cp .env.example .env` and set `MODELS_DIR` to where you want your models
+(e.g. `/mnt/user/appdata/ollama/models`), then `docker compose up -d`.
 
 Option B — the included `unraid-template.xml`: drop it into
 `/mnt/user/appdata/templates/`, refresh the Docker tab, add the container.
@@ -125,7 +126,7 @@ docker build -f Dockerfile.offline -t ollama-sycl:local .
 
 | Var | Default | Notes |
 |---|---|---|
-| `ONEAPI_DEVICE_SELECTOR` | `level_zero:0` | Pin the dGPU. **If you also have an Intel iGPU**, check `level_zero:1` is the Arc card — run `clinfo` or check `docker logs` for the device name. |
+| `ONEAPI_DEVICE_SELECTOR` | `level_zero:0` | Pin the dGPU. **If you also have an Intel iGPU**, check `level_zero:1` is the Arc card — check `docker logs ollama` for the device name on `inference compute`. |
 | `ZES_ENABLE_SYSMAN` | `1` | VRAM accounting — keep on |
 | `SYCL_CACHE_PERSISTENT` | `0` | **Do not set to 1 on Battlemage** — first-JIT segfaults. Persist the JIT cache instead by mounting a volume at `/root/.cache` (compose does this). |
 | `OLLAMA_KEEP_ALIVE` | `10m` | Idle unload time. `-1` = never unload |
@@ -223,12 +224,16 @@ docker run ... --device /dev/dri ... \
   `/dev/dri` is passed, `xe` driver loaded on host (`lsmod | grep xe`), kernel
   ≥ 6.8. On Unraid the B70 needs the card *not* assigned to VMs.
 - **`No device` / `level_zero:0` empty** — wrong device index (iGPU present).
-  Enumerate: `docker run --rm --device /dev/dri -it <image> clinfo | grep "Device Name"`.
+  Enumerate devices from Ollama's own log: start the container with
+  `--device /dev/dri` added and run `docker logs ollama 2>&1 | grep "inference
+  compute"` — the device name shown is what bound to `level_zero:0`. If it's
+  your iGPU, switch to `level_zero:1`.
 - **Model stuck loading / slow first run** — first SYCL JIT compile. ~30–60 s
   per model size; cached in `/root/.cache` afterwards (mount a volume).
 - **Decode ~10-15% slower than expected after a container recreate** — you
   dropped `--ipc=host`. SYCL thread synchronization needs the host IPC
-  namespace; the default 64 MB `/dev/shm` cripples it. Verify:
+  namespace; the default 64 MB `/dev/shm` caps you ~10-15% below real speed.
+  Verify:
   `docker inspect ollama --format '{{.HostConfig.IpcMode}}'` → must be `host`.
 - **`quantized V cache requires flash_attn to be enabled`** — you set
   `OLLAMA_KV_CACHE_TYPE` without `OLLAMA_FLASH_ATTENTION=true`. Set both, or
