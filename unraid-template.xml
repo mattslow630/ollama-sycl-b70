@@ -30,6 +30,8 @@
   <Config Name="ZES_ENABLE_SYSMAN" Target="ZES_ENABLE_SYSMAN" Default="1" Mode="" Description="VRAM accounting - keep 1" Type="Variable" Display="hide" Required="false">1</Config>
   <Config Name="SYCL_CACHE_PERSISTENT" Target="SYCL_CACHE_PERSISTENT" Default="0" Mode="" Description="MUST be 0 on Battlemage (segfault otherwise)" Type="Variable" Display="hide" Required="false">0</Config>
   <Config Name="OLLAMA_KEEP_ALIVE" Target="OLLAMA_KEEP_ALIVE" Default="10m" Mode="" Description="Unload models after this idle time (-1 = never)" Type="Variable" Display="always" Required="false">10m</Config>
+  <Config Name="OLLAMA_KV_CACHE_TYPE" Target="OLLAMA_KV_CACHE_TYPE" Default="q8_0" Mode="" Description="KV cache quant: q8_0 halves context VRAM, near-lossless. Requires OLLAMA_FLASH_ATTENTION=true. Blank = default f16." Type="Variable" Display="always" Required="false">q8_0</Config>
+  <Config Name="OLLAMA_FLASH_ATTENTION" Target="OLLAMA_FLASH_ATTENTION" Default="true" Mode="" Description="Required when OLLAMA_KV_CACHE_TYPE is set (quantized V cache refuses to start without FA)" Type="Variable" Display="hide" Required="false">true</Config>
   <Config Name="OLLAMA_CONTEXT_LENGTH" Target="OLLAMA_CONTEXT_LENGTH" Default="4096" Mode="" Description="Context window in tokens (more = more VRAM)" Type="Variable" Display="always" Required="false">4096</Config>
   <Config Name="OLLAMA_ORIGINS" Target="OLLAMA_ORIGINS" Default="*" Mode="" Description="CORS origins for web UIs" Type="Variable" Display="hide" Required="false">*</Config>
 </Container>
