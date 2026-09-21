@@ -1,5 +1,8 @@
 # ollama-sycl-b70
 
+> **Credit:** this repository — docs, Dockerfile, scripts — was created with the
+> **qwen3.8-27b** LLM (running on exactly this stack).
+
 **Ollama with an Intel Arc SYCL/oneAPI backend, built from Ollama's own source.**
 
 Stock `ollama/ollama` uses a **Vulkan** backend for Intel GPUs. This image adds a
